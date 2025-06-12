@@ -114,19 +114,27 @@ def consensus_based_gradient(X_parts, Y_parts, G, config, Topt, eta, decay):
         intermediates_np = np.stack([param.detach().numpy() for param in intermediates])  # shape (M, 3)
 
         consensus_result = []
-        for dim in range(intermediates_np.shape[1]):
-            z_ini = intermediates_np[:, dim]
-            z_history = privacy_preserving_avg_consensus(z_ini, G, config, 1) # T=1
-            consensus_final = z_history[-1]
-            consensus_result.append(consensus_final)
+        # for dim in range(intermediates_np.shape[1]):
+        #     z_ini = intermediates_np[:, dim]
+        #     z_history = privacy_preserving_avg_consensus(z_ini, G, config, 1) # T=1
+        #     consensus_final = z_history[-1]
+        #     consensus_result.append(consensus_final)
+        # Use vector consensus directly
+        z_ini = intermediates_np  # shape (M, 3)
+        z_history = privacy_preserving_avg_consensus(z_ini, G, config, 1)  # T=1
+        consensus_result = z_history[-1]  # shape (M, 3)
 
-        consensus_result = np.stack(consensus_result, axis=1)  # shape (M, 3)
+        # consensus_result = np.stack(consensus_result, axis=1)  # shape (M, 3)
 
         # Update hyperparameter updates
+        # theta_estimates = [
+        #     torch.tensor(consensus_result[i, :]).clone().detach().requires_grad_()
+        #     for i in range(M)
+        # ]
         theta_estimates = [
-            torch.tensor(consensus_result[i, :]).clone().detach().requires_grad_()
-            for i in range(M)
-        ]
+        torch.tensor(consensus_result[i, :], dtype=torch.float32).clone().detach().requires_grad_()
+        for i in range(M)
+]
 
         current_estimates = np.array([theta_estimates[i].detach().numpy() for i in range(M)])  # (M, 3)
         history.append(current_estimates)
