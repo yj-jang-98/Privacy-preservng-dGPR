@@ -20,7 +20,7 @@ def quant(z,Lz):
     """
     return np.round(z/Lz).astype(int)
 
-def share(n, q):
+def share(n, q, p):
     """
     Creat n-shares of zero in Z_q
 
@@ -30,6 +30,8 @@ def share(n, q):
         Number of shares
     q : int
         Modulus
+    p : int
+        Dimension
 
     Returns
     -------
@@ -37,12 +39,16 @@ def share(n, q):
         (s_1,...,s_n)
     """
 
-    s = np.array([get_rand((-q+1)//2, q//2) for _ in range(n - 1)])
-    s = np.append(s, mod(-s.sum(),q))
-    return s
+    shares = np.array([
+        [get_rand((-q+1)//2, q//2) for _ in range(p)]
+        for _ in range(n - 1)
+    ])
+    last_share = mod_vec(-shares.sum(axis=0), q)
+    shares = np.vstack([shares, last_share])
+    return shares
 
 
-def generate_masking_parts(G, i, q=2**40):
+def generate_masking_parts(G, i, q, p):
     """
     Runs Protocol 1
 
@@ -53,7 +59,8 @@ def generate_masking_parts(G, i, q=2**40):
         Aggregating agent
     q : int
         Modulus
-
+    p : int
+        Dimension
     Returns
     -------
     tuple of int
@@ -69,102 +76,111 @@ def generate_masking_parts(G, i, q=2**40):
         N_plus_dict[j] = set(G.neighbors(j)) | {j}
 
     # Step 1: Each j generates shares s^i_{j->l} for l in N_i^+ ∩ N_j^+
-    shares_dict = {}  # keys: (j,l), value: share s^i_{j->l}
+    shares_dict = {}  # keys: (j,l), value: vector share s^i_{j->l} ∈ Z_q^p
     for j in N_i_plus:
         common_neighbors = N_i_plus & N_plus_dict[j]
         n_ij = len(common_neighbors)
-        zero_shares = share(n_ij, q)
-        for l, share_val in zip(common_neighbors, zero_shares):
-            shares_dict[(j,l)] = share_val
+        zero_shares = share(n_ij, q, p)  # shape (n_ij, p)
+        for l, share_vec in zip(common_neighbors, zero_shares):
+            shares_dict[(j, l)] = share_vec
 
     # Step 2: Each j computes m_ij(t) = sum_{l in N_i^+ ∩ N_j^+} s^i_{l->j} mod q
     m = {}
     for j in N_i_plus:
         common_neighbors = N_i_plus & N_plus_dict[j]
-        s_sum = mod(sum(shares_dict[(l,j)] for l in common_neighbors),q)
-        m[j] = s_sum
+        s_sum = sum(shares_dict[(l, j)] for l in common_neighbors)
+        m[j] = mod_vec(s_sum, q)  # s_sum ∈ Z^p → mod applied elementwise
     return m
 
-def distributed_masking_for_all(G, q):
+def distributed_masking_for_all(G, q, p):
     """
-    Repeats Protocol 1 for all i
+    Runs Protocol 1 for all agents in the graph, producing p-dimensional masks.
 
     Parameters
     ----------
     G : Graph
+        Network graph (e.g., networkx.Graph)
     q : int
         Modulus
+    p : int
+        Dimension 
 
     Returns
     -------
-    tuple of masks
+    dict
+        Nested dict where result[j][i] = m_ij(t) ∈ Z_q^p
     """
+    # First, compute all m_ij(t) for each i
     masks_t = {}
     for i in G.nodes():
-        masks_t[i] = generate_masking_parts(G, i, q)
+        masks_t[i] = generate_masking_parts(G, i, q, p)
+
+    # Reorganize: for each agent j, collect m_ij(t) from all i
     masks_by_agent = {j: {} for j in G.nodes()}
     for i, m_ij in masks_t.items():
         for j, val in m_ij.items():
-            masks_by_agent[j][i] = val
+            masks_by_agent[j][i] = val  # val ∈ Z_q^p (np.ndarray)
+
     return masks_by_agent
 
 
-def privacy_preserving_avg_consensus(zini,G,config, T):
+def privacy_preserving_avg_consensus(zini, G, config, T):
     """
-    Runs Protocol 2
+    Runs Protocol 2 with p-dimensional states and privacy-preserving masking.
 
     Parameters
     ----------
-    zini : float
-        Initial value
+    zini : np.ndarray
+        Initial values of shape (n, p), where n = number of agents, p = dimension
     G : Graph
-    config: class
-        Scale factors, modulus, and weight matrix
+        Network graph
+    config : dict
+        Dictionary containing:
+            - "q": modulus
+            - "Lz": quantization scale
+            - "Lw": learning rate / weight scaling
+            - "Wbar": doubly stochastic weight matrix of shape (n, n)
     T : int
-        Maximum number of iterations
+        Number of consensus iterations
 
     Returns
     -------
-    int
-        Generated random integer in `[min, max)`.
+    list of np.ndarray
+        History of z values over time, each entry of shape (n, p)
     """
     q = config["q"]
     Lz = config["Lz"]
     Lw = config["Lw"]
     Wbar = config["Wbar"]
-    
-    z = zini 
-    z_history_pp = [z.copy()]  
 
-    
+    n, p = zini.shape
+    z = zini.copy()
+    z_history_pp = [z.copy()]
+
     for _ in range(T):
-        # Storage
         z_next = np.zeros_like(z)
-        # Run Protocol 1
-        masks_by_agent = distributed_masking_for_all(G, q)
+
+        # Run Protocol 1 for all agents
+        masks_by_agent = distributed_masking_for_all(G, q, p)
+
         for i in G.nodes():
-            # Qunatize z_i
-            z_i_q = quant(z[i], Lz)
-            sum_term = 0
-            # Aggregation
+            z_i_q = quant(z[i], Lz)  # shape (p,)
+            sum_term = np.zeros(p, dtype=int)
+
             for j in G.neighbors(i):
-                # mask from agent j for i
-                m_ij = masks_by_agent[j][i]  
-                z_j_q = quant(z[j], Lz)
-                w_ij = Wbar[i, j]
+                m_ij = masks_by_agent[j][i]       # shape (p,)
+                z_j_q = quant(z[j], Lz)           # shape (p,)
+                w_ij = Wbar[i, j]                 # scalar
 
-                # Compute ζ_ij(t) = w_ij * Q(z_j) + m_ij
-                zeta_ij = w_ij * z_j_q + m_ij
+                zeta_ij = w_ij * z_j_q + m_ij     # shape (p,)
+                sum_term = mod_vec(sum_term + zeta_ij - w_ij * z_i_q, q)
 
-                # Add ζ_ij(t) and subtract w_ij * Q(z_i) mod q
-                sum_term = mod(sum_term + zeta_ij - w_ij * z_i_q, q)
-
-            # Add agent i's own mask m_{ii}(t)
-            m_ii = masks_by_agent[i][i]  
-            total = mod(m_ii + sum_term, q)
+            # Add agent i's own mask
+            m_ii = masks_by_agent[i][i]           # shape (p,)
+            total = mod_vec(m_ii + sum_term, q)       # shape (p,)
 
             # Update z_i(t+1)
-            z_next[i] = z[i] + Lw * Lz * total
+            z_next[i] = z[i] + Lw * Lz * total    # shape (p,)
 
         z = z_next
         z_history_pp.append(z.copy())
