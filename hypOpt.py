@@ -2,12 +2,7 @@ import torch
 import gpytorch
 from share import privacy_preserving_avg_consensus
 import numpy as np
-import matplotlib.pyplot as plt
-from IPython.display import display, Math
-import tikzplotlib
-from matplotlib.lines import Line2D
 import time
-import concurrent.futures
 
 
 # --- Define GP model
@@ -58,28 +53,24 @@ def hyperparameter_optimization(X_parts, Y_parts, G, config, scales, device):
     history_all = [None] * k 
     loss_sum_all = [None] * k 
 
-    def worker(d):
-        # Extract the d-th output dimension data for each agent
+    
+    for d in range(k):
+        # Extract the d-th output dimension for each agent
         Y_d_parts = [Y_parts[i][:, d].unsqueeze(-1) for i in range(M)]
-        
-        # Run the 1D hyperparameter optimization for d-th output dimension
-        models_d, likelihoods_d, history_d, loss_sum_d, elapsed = hyperparameter_optimization_1D(X_parts, Y_d_parts, G, config, scales, device)
-        
+
+        # Run 1D optimization for output dimension d
+        models_d, likelihoods_d, history_d, loss_sum_d, elapsed = hyperparameter_optimization_1D(
+            X_parts, Y_d_parts, G, config, scales, device
+        )
+
         print(f"[Output dimension {d+1}] elapsed time: {elapsed:.2f}s")
-        return d, models_d, likelihoods_d, history_d, loss_sum_d
 
-    # --- Parallelize hyperparameter optimization across output dims
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(k, 8)) as executor:
-        futures = [executor.submit(worker, d) for d in range(k)]
-        
-        for future in concurrent.futures.as_completed(futures):
-            d, models_d, likelihoods_d, history_d, loss_sum_d = future.result()
-            for i in range(M):
-                models_all[i][d] = models_d[i]
-                likelihoods_all[i][d] = likelihoods_d[i]
-                history_all[d] = history_d
-                loss_sum_all[d] = loss_sum_d
-
+        # Store results
+        for i in range(M):
+            models_all[i][d] = models_d[i]
+            likelihoods_all[i][d] = likelihoods_d[i]
+        history_all[d] = history_d
+        loss_sum_all[d] = loss_sum_d
 
     return models_all, likelihoods_all, history_all, loss_sum_all
 

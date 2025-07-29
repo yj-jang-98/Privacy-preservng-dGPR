@@ -111,9 +111,9 @@ def plot_accuracy(sarcos_rmse_means, sarcos_rmse_vars, diab_rmse_means, diab_rms
                 linewidth=2.5, color=colors[lz_idx])
         
     ax.set_xlim(0, config["T"])
-    ax.set_ylim(0.4, 1.7)
+    # ax.set_ylim(0.4, 1.7)
     ax.set_xticks([0,config["T"]/2,config["T"]])
-    ax.set_yticks([0.5,1,1.5])
+    # ax.set_yticks([0.5,1,1.5])
     ax.set_xlabel(r"$T$")
     ax.grid(True)
 
@@ -148,9 +148,9 @@ def plot_accuracy(sarcos_rmse_means, sarcos_rmse_vars, diab_rmse_means, diab_rms
     ax.set_xlabel(r"$T$")
     ax.grid(True)
     ax.set_xlim(0, config["T"])
-    ax.set_ylim(0.038, 0.043)
+    # ax.set_ylim(0.038, 0.043)
     ax.set_xticks([0,config["T"]/2,config["T"]])
-    ax.set_yticks([0.038,0.04, 0.042])
+    # ax.set_yticks([0.038,0.04, 0.042])
     
 
     axins = inset_axes(ax, width="40%", height="40%", 
@@ -183,9 +183,9 @@ def plot_accuracy(sarcos_rmse_means, sarcos_rmse_vars, diab_rmse_means, diab_rms
                 linewidth=2, color=colors[lz_idx])
         
     ax.set_xlim(0,config["T"])
-    ax.set_ylim(0, 12)
+    # ax.set_ylim(0, 12)
     ax.set_xticks([0,config["T"]/2,config["T"]])
-    ax.set_yticks([0,5,10])
+    # ax.set_yticks([0,5,10])
     ax.set_xlabel(r"$T$")
     ax.grid(True)
 
@@ -217,9 +217,9 @@ def plot_accuracy(sarcos_rmse_means, sarcos_rmse_vars, diab_rmse_means, diab_rms
                 linewidth=2, color=colors[lz_idx])
         
     ax.set_xlim(0,config["T"])
-    ax.set_ylim(0, 0.008)
+    # ax.set_ylim(0, 0.008)
     ax.set_xticks([0,config["T"]/2,config["T"]])
-    ax.set_yticks([0,0.005])
+    # ax.set_yticks([0,0.005])
     ax.set_xlabel(r"$T$")
     ax.yaxis.set_major_formatter(FuncFormatter(custom_formatter3))
 
