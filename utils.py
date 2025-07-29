@@ -1,25 +1,22 @@
 from secrets import randbelow
 import numpy as np
+import torch
 
-
-def get_rand(min: int, max: int) -> int:
+def get_rand(min: int, max: int, device) -> int:
     """
     Generates a random integer in `[min, max)`.
 
     Parameters
     ----------
-    min : int
-        The minimum value of the range (inclusive).
-    max : int
-        The maximum value of the range (exclusive).
+        min : The minimum value of the range (inclusive).
+        max : The maximum value of the range (exclusive).
 
     Returns
     -------
-    int
         Generated random integer in `[min, max)`.
     """
 
-    return randbelow(max - min) + min
+    return torch.randint(min, max, (1,), dtype=torch.int64, device=device).item()
 
 def mod(x, q):
     """
@@ -27,19 +24,15 @@ def mod(x, q):
 
     Parameters
     ----------
-    x : int
-        Input value
-    q : int
-        Modulus
+        x : Input value
+        q : Modulus
 
     Returns
     -------
-    int
         x mod q
     """
     r = x % q
-    if r >= q // 2:
-        r -= q
+    r = torch.where(r >= q // 2, r - q, r)  # Element-wise conditional mod operation
     return r
 
 def mod_vec(x, q):
@@ -48,15 +41,13 @@ def mod_vec(x, q):
 
     Parameters
     ----------
-    x : nparray of int
-    q : int
-        modulus
+        x : nparray of int
+        q : modulus
 
     Returns
     -------
-    nparray of int
         x mod q
     """
-    r = np.mod(x, q)
-    r = np.where(r >= q // 2, r - q, r)
+    r = x % q
+    r = torch.where(r >= q // 2, r - q, r)  # Element-wise conditional mod operation
     return r
